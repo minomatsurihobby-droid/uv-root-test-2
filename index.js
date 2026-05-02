@@ -5,7 +5,7 @@ const app = express();
 
 
 app.get('/', (req, res) => {
-  res.send('test4');
+  res.send('test5');
 });
 
 
@@ -20,22 +20,29 @@ app.get('/', (req, res) => {
  */
 const PROXY_DIR = path.join(__dirname, 'proxy');
 
-app.use('/uv', express.static(path.join(PROXY_DIR, 'uv'), {
-    index: false, // ディレクトリ自体へのアクセスを禁止
-    immutable: true,
-    maxAge: '1d' // 必要に応じてキャッシュ設定
-}));
-
-// /prxy/baremux/index.js や /prxy/register-sw.mjs を PROXY_DIR/prxy 内から探す
-// 内部にディレクトリ（baremux等）があっても express.static が自動で再帰的に探してくれます
-app.use('/prxy', express.static(path.join(PROXY_DIR, 'prxy'), {
-    index: false,
-    immutable: true,
-    maxAge: '1d'
-}));
-
-// もし /proxy/ というフルパスでのアクセスも維持したい場合
 app.use('/proxy', express.static(PROXY_DIR));
+
+
+app.use(/^\/(uv|prxy)\/.*/, (req, res, next) => {
+    // req.baseUrl ではなく req.originalUrl (または req.path) を使用
+    const targetPath = path.join(PROXY_DIR, req.path);
+
+    // セキュリティ: ディレクトリトラバーサル対策
+    const normalizedPath = path.normalize(targetPath);
+    if (!normalizedPath.startsWith(PROXY_DIR)) {
+        return next();
+    }
+
+    // ファイルの存在確認と送信
+    // このブロックは /uv/... か /prxy/... の時しか実行されないので超軽量です
+    fs.stat(targetPath, (err, stats) => {
+        if (!err && stats.isFile()) {
+            return res.sendFile(targetPath);
+        }
+        // ファイルがない、あるいはエラーの場合は静かに next() して通常の 404 等へ流す
+        next();
+    });
+});
 
 
 // Vercel環境およびローカルでの起動用
