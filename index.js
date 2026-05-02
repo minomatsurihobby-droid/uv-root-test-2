@@ -8,7 +8,6 @@ app.get('/', (req, res) => {
   res.send('test4');
 });
 
-const PROXY_DIR = path.join(__dirname, 'proxy');
 
 /**
  * PROXY_DIR/
@@ -20,10 +19,7 @@ const PROXY_DIR = path.join(__dirname, 'proxy');
  *     └── register-sw.mjs
  */
 
-app.use('/proxy', express.static(PROXY_DIR));
-
-app.use((req, res, next) => {
-    // リクエストされたパスを PROXY_DIR と結合
+app.use(['/uv', '/prxy'], (req, res, next) => {
     const targetPath = path.join(PROXY_DIR, req.path);
 
     const normalizedPath = path.normalize(targetPath);
@@ -32,15 +28,19 @@ app.use((req, res, next) => {
     }
 
     try {
-        if (fs.existsSync(targetPath) && fs.lstatSync(targetPath).isFile()) {
-            // サービスワーカー登録のためMIMEタイプでファイルを返却
+        const stats = fs.statSync(targetPath);
+        if (stats.isFile()) {
             return res.sendFile(targetPath);
         }
     } catch (err) {
-        console.error(`File access error: ${err}`);
     }
+
     next();
 });
+
+app.use('/proxy', express.static(PROXY_DIR));
+
+
 
 // Vercel環境およびローカルでの起動用
 const PORT = process.env.PORT || 3000;
