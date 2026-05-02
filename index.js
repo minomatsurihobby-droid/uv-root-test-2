@@ -19,30 +19,34 @@ app.get('/', (req, res) => {
  *     └── register-sw.mjs
  */
 const PROXY_DIR = path.join(__dirname, 'proxy');
-app.use(['/uv', '/prxy'], (req, res, next) => {
-    // 1. baseUrl（/uv または /prxy）と残りのパスを結合してフルパスを作成
-    // req.baseUrl は '/uv' や '/prxy'、req.path は '/sw.js' や '/baremux/index.js'
-    const targetPath = path.join(PROXY_DIR, req.baseUrl, req.path);
+app.use('/proxy', express.static(PROXY_DIR));
 
-    // 2. セキュリティチェック（ディレクトリトラバーサル防止）
+// 2. /uv/ や /prxy/ で始まるリクエストを自動的に /proxy/ 内部へルーティングするミドルウェア
+app.use((req, res, next) => {
+    // リクエストされたパス（例: /prxy/baremux/index.js）を PROXY_DIR と結合
+    // これにより自動的に /proxy/prxy/baremux/index.js を指すようになります
+    const targetPath = path.join(PROXY_DIR, req.path);
+
+    // セキュリティ対策: PROXY_DIR 外のファイルへのアクセスを防止
     const normalizedPath = path.normalize(targetPath);
     if (!normalizedPath.startsWith(PROXY_DIR)) {
         return next();
     }
 
-    // 3. ファイルの存在確認と返却
-    // 特定のディレクトリ宛てであることが確定しているため、負荷の影響は限定的です
-    fs.stat(targetPath, (err, stats) => {
-        if (!err && stats.isFile()) {
+    try {
+        // ファイルが存在し、かつディレクトリではないことを確認
+        if (fs.existsSync(targetPath) && fs.lstatSync(targetPath).isFile()) {
+            // 正しいMIMEタイプでファイルを返却
             return res.sendFile(targetPath);
         }
-        // ファイルがない、またはエラーの場合は速やかに次の処理（404など）へ
-        next();
-    });
-});
+    } catch (err) {
+        // ファイルシステムエラーが発生した場合はログを出力して次へ
+        console.error(`File access error: ${err}`);
+    }
 
-// 予備：もし /proxy/filename で直接アクセスが来た場合用
-app.use('/proxy', express.static(PROXY_DIR));
+    // ファイルが見つからない場合は次のミドルウェア（404処理など）へ
+    next();
+});
 
 // Vercel環境およびローカルでの起動用
 const PORT = process.env.PORT || 3000;
