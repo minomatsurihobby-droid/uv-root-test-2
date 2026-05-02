@@ -10,33 +10,27 @@ app.get('/', (req, res) => {
   res.send('test2');
 });
 
-const PROXY_ENDPOINTS = [
-  'prxy',
-  'baremux',
-  'epoxy',
-  'libcurl',
-  'register-sw.mjs',
-  'uv'
-];
+const PROXY_DIR = path.join(__dirname, 'proxy'); 
 
-// 静的ファイルの提供設定
+// 1. 既存の /proxy エンドポイント用 (uvなどはここに含まれる)
 app.use('/proxy', express.static(PROXY_DIR));
 
+// 2. /prxy 以下の構造を解決するためのミドルウェア
 app.use((req, res, next) => {
-  // リクエストされたパスから先頭のスラッシュを取り除いた名前を取得
-  const fileName = req.path.replace(/^\//, '');
+  // リクエストが /prxy から始まる場合のみ処理を行う
+  if (req.path.startsWith('/prxy')) {
+    
+    // リクエストされたパス（例: /prxy/baremux/index.js）を 
+    // 物理ディレクトリ（PROXY_DIR/prxy/baremux/index.js）に結合
+    const targetFilePath = path.join(PROXY_DIR, req.path);
 
-  // もしリクエストが対象リストに含まれている場合
-  if (PROXY_ENDPOINTS.includes(fileName)) {
-    // PROXY_DIR 内の該当ファイルを指すパスを作成
-    const targetPath = path.join(PROXY_DIR, fileName);
-
-    // ファイルが存在するか確認して送信
-    if (fs.existsSync(targetPath) && fs.lstatSync(targetPath).isFile()) {
-      return res.sendFile(targetPath);
+    // ファイルが存在し、かつディレクトリではない（ファイルである）ことを確認
+    if (fs.existsSync(targetFilePath) && fs.lstatSync(targetFilePath).isFile()) {
+      return res.sendFile(targetFilePath);
     }
   }
 
+  // 該当しないリクエスト、またはファイルが見つからない場合は次のルーティングへ
   next();
 });
 
