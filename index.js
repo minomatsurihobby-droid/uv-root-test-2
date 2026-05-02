@@ -20,27 +20,22 @@ app.get('/', (req, res) => {
  */
 const PROXY_DIR = path.join(__dirname, 'proxy');
 
-app.use(['/uv', '/prxy'], (req, res, next) => {
-    const targetPath = path.join(PROXY_DIR, req.path);
+app.use('/uv', express.static(path.join(PROXY_DIR, 'uv'), {
+    index: false, // ディレクトリ自体へのアクセスを禁止
+    immutable: true,
+    maxAge: '1d' // 必要に応じてキャッシュ設定
+}));
 
-    const normalizedPath = path.normalize(targetPath);
-    if (!normalizedPath.startsWith(PROXY_DIR)) {
-        return next();
-    }
+// /prxy/baremux/index.js や /prxy/register-sw.mjs を PROXY_DIR/prxy 内から探す
+// 内部にディレクトリ（baremux等）があっても express.static が自動で再帰的に探してくれます
+app.use('/prxy', express.static(path.join(PROXY_DIR, 'prxy'), {
+    index: false,
+    immutable: true,
+    maxAge: '1d'
+}));
 
-    try {
-        const stats = fs.statSync(targetPath);
-        if (stats.isFile()) {
-            return res.sendFile(targetPath);
-        }
-    } catch (err) {
-    }
-
-    next();
-});
-
+// もし /proxy/ というフルパスでのアクセスも維持したい場合
 app.use('/proxy', express.static(PROXY_DIR));
-
 
 
 // Vercel環境およびローカルでの起動用
