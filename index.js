@@ -10,7 +10,6 @@ app.get('/', (req, res) => {
   res.send('test2');
 });
 
-const PROXY_DIR = path.join(__dirname, 'proxy'); 
 
 // 1. 既存の /proxy エンドポイント用 (uvなどはここに含まれる)
 app.use('/proxy', express.static(PROXY_DIR));
