@@ -3,35 +3,61 @@ const path = require('path');
 const fs = require('fs');
 const app = express();
 
-const PROXY_DIR = path.join(__dirname, 'proxy');
 
 // 1. ルート直下のテスト
 app.get('/', (req, res) => {
-  res.send('test2');
+  res.send('test3');
 });
 
 
-// 1. 既存の /proxy エンドポイント用 (uvなどはここに含まれる)
+const PROXY_DIR = path.join(__dirname, 'proxy');
+
+/**
+ * 静的ファイルの提供 (標準の /proxy へのアクセス用)
+ */
 app.use('/proxy', express.static(PROXY_DIR));
 
-// 2. /prxy 以下の構造を解決するためのミドルウェア
+/**
+ * 構成を考慮したエンドポイント解決ミドルウェア
+ */
 app.use((req, res, next) => {
-  // リクエストが /prxy から始まる場合のみ処理を行う
-  if (req.path.startsWith('/prxy')) {
-    
-    // リクエストされたパス（例: /prxy/baremux/index.js）を 
-    // 物理ディレクトリ（PROXY_DIR/prxy/baremux/index.js）に結合
-    const targetFilePath = path.join(PROXY_DIR, req.path);
+    const reqPath = req.path;
 
-    // ファイルが存在し、かつディレクトリではない（ファイルである）ことを確認
-    if (fs.existsSync(targetFilePath) && fs.lstatSync(targetFilePath).isFile()) {
-      return res.sendFile(targetFilePath);
+    // 1. /prxy/ から始まるリクエストの処理
+    // 例: /prxy/baremux/index.js -> [PROXY_DIR]/prxy/baremux/index.js
+    if (reqPath.startsWith('/prxy/')) {
+        const targetPath = path.join(PROXY_DIR, reqPath);
+        if (isValidFile(targetPath)) {
+            return res.sendFile(targetPath);
+        }
     }
-  }
 
-  // 該当しないリクエスト、またはファイルが見つからない場合は次のルーティングへ
-  next();
+    // 2. ルート直下としてリクエストされた場合の処理 (フォールバック)
+    // baremux, epoxy, libcurl, register-sw.mjs 等への直接アクセスを /proxy/prxy/ 内で探す
+    const prxySubDirs = ['baremux', 'epoxy', 'libcurl'];
+    const firstSegment = reqPath.split('/')[1];
+
+    if (prxySubDirs.includes(firstSegment) || reqPath === '/register-sw.mjs') {
+        // これらは /proxy/prxy/ の中にあるため、パスを再構成
+        const targetPath = path.join(PROXY_DIR, 'prxy', reqPath);
+        if (isValidFile(targetPath)) {
+            return res.sendFile(targetPath);
+        }
+    }
+
+    next();
 });
+
+/**
+ * ファイルが有効（存在し、かつディレクトリではない）かチェックする補助関数
+ */
+function isValidFile(filePath) {
+    try {
+        return fs.existsSync(filePath) && fs.lstatSync(filePath).isFile();
+    } catch (e) {
+        return false;
+    }
+}
 
 // Vercel環境およびローカルでの起動用
 const PORT = process.env.PORT || 3000;
