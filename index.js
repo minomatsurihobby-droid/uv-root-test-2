@@ -18,6 +18,7 @@ app.get('/', (req, res) => {
  *     ├── libcurl/ (index.js, etc.)
  *     └── register-sw.mjs
  */
+const PROXY_DIR = path.join(__dirname, 'proxy');
 
 app.use(['/uv', '/prxy'], (req, res, next) => {
     const targetPath = path.join(PROXY_DIR, req.path);
